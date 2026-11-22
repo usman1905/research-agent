@@ -24,7 +24,7 @@ class LLM:
     api_key: str
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
-    timeout: float = 60.0
+    timeout: float = 30.0
     fallbacks: tuple[str, ...] = field(default_factory=tuple)
     retries: int = 2
 
@@ -42,7 +42,7 @@ class LLM:
             fallbacks = GEMINI_FALLBACKS
         return cls(key, base_url, get("LLM_MODEL", DEFAULT_MODEL), fallbacks=fallbacks)
 
-    def _post(self, model: str, system: str, user: str, temperature: float) -> httpx.Response:
+    def _post(self, model: str, system: str, user: str, temperature: float) -> httpx.Response | None:
         try:
             return httpx.post(
                 f"{self.base_url.rstrip('/')}/chat/completions",
@@ -54,6 +54,8 @@ class LLM:
                 },
                 timeout=self.timeout,
             )
+        except httpx.TimeoutException:
+            return None
         except httpx.HTTPError as e:
             raise LLMError(f"Could not reach the language model: {e}") from e
 
@@ -61,9 +63,13 @@ class LLM:
         """Ask the model; retries busy models with backoff, then falls back to other models."""
         models = [self.model, *(m for m in self.fallbacks if m != self.model)]
         last = None
+        timed_out = False
         for model in models:
             for attempt in range(self.retries + 1):
                 res = self._post(model, system, user, temperature)
+                if res is None:  # slow model: move on to the next one
+                    timed_out = True
+                    break
                 if res.status_code < 400:
                     return res.json()["choices"][0]["message"]["content"].strip()
                 if res.status_code in (401, 403):
@@ -73,6 +79,8 @@ class LLM:
                     break  # e.g. unknown model: try the next one
                 if attempt < self.retries:
                     time.sleep(1.5 * 2**attempt)
+        if last is None and timed_out:
+            raise LLMError("The language model took too long to answer. Try again in a minute.")
         if last is not None and last.status_code == 429:
             raise LLMError("The model's rate limit was hit. Wait a minute and try again.")
         if last is not None and last.status_code in RETRYABLE:
