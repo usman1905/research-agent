@@ -32,3 +32,15 @@ def test_bad_key_fails_fast(monkeypatch):
 def test_gemini_gets_default_fallbacks():
     llm = LLM.from_env({"LLM_API_KEY": "k", "LLM_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai"})
     assert llm.fallbacks == llm_mod.GEMINI_FALLBACKS
+
+
+def test_timeout_moves_to_next_model(monkeypatch):
+    calls = []
+
+    def fake_post(self, model, *a):
+        calls.append(model)
+        return None if model == "slow" else _ok("done")
+
+    monkeypatch.setattr(LLM, "_post", fake_post)
+    assert LLM("k", model="slow", fallbacks=("fast",)).chat("s", "u") == "done"
+    assert calls == ["slow", "fast"]
