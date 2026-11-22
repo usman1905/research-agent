@@ -7,6 +7,10 @@
 </p>
 
 <p align="center">
+  <a href="https://webresearchai.streamlit.app"><b>Try the live app →</b></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/usman1905/research-agent/actions/workflows/ci.yml"><img src="https://github.com/usman1905/research-agent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
