@@ -44,3 +44,17 @@ def test_timeout_moves_to_next_model(monkeypatch):
     monkeypatch.setattr(LLM, "_post", fake_post)
     assert LLM("k", model="slow", fallbacks=("fast",)).chat("s", "u") == "done"
     assert calls == ["slow", "fast"]
+
+
+def test_search_falls_back_to_wikipedia(monkeypatch):
+    import ddgs
+
+    from webresearch import web
+
+    class Blocked:
+        def text(self, *a, **k):
+            raise RuntimeError("blocked")
+
+    monkeypatch.setattr(ddgs, "DDGS", Blocked)
+    monkeypatch.setattr(web, "wikipedia_search", lambda q, n: [web.SearchHit("RAG", "https://en.wikipedia.org/wiki/RAG", "")])
+    assert web.search("rag")[0].url.endswith("/RAG")
